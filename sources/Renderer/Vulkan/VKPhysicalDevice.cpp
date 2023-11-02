@@ -205,10 +205,10 @@ void VKPhysicalDevice::QueryDeviceProperties(
     caps.features.hasMultiSampleArrayTextures       = true;
     caps.features.hasTextureViews                   = true;
     caps.features.hasTextureViewSwizzle             = true;
+    caps.features.hasTextureViewFormatSwizzle       = true;
     caps.features.hasBufferViews                    = true;
     caps.features.hasConstantBuffers                = true;
     caps.features.hasStorageBuffers                 = true;
-    caps.features.hasUniforms                       = true;
     caps.features.hasGeometryShaders                = (features_.geometryShader != VK_FALSE);
     caps.features.hasTessellationShaders            = (features_.tessellationShader != VK_FALSE);
     caps.features.hasTessellatorStage               = caps.features.hasTessellationShaders;

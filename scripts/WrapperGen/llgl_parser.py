@@ -87,7 +87,7 @@ class Scanner:
         try:
             with open(filename, 'r') as file:
                 text = preprocessSource(file.read())
-                return re.findall(r'//[^\n]*|[a-zA-Z_]\w*|\d+\.\d+[fF]|\d+[uU]|\d+|[{}\[\]]|::|:|<<|>>|[+-=,;<>\|]|[*]|[(]|[)]', text)
+                return re.findall(r'//[^\n]*|"[^"]+"|[a-zA-Z_]\w*|\d+\.\d+[fF]|\d+[uU]|\d+|[{}\[\]]|::|:|\.\.\.|<<|>>|[+-=,;<>\|~]|[*]|[(]|[)]', text)
         except UnicodeDecodeError:
             fatal('UnicodeDecodeError exception while reading file: ' + filename)
         return None
@@ -162,10 +162,11 @@ class Parser:
 
     def tryParseDeprecated(self):
         if self.scanner.acceptIf('LLGL_DEPRECATED'):
-            while self.scanner.accept() != ')':
-                pass
-            return True
-        return False
+            self.scanner.acceptOrFail('(')
+            msg = self.scanner.accept()
+            self.scanner.ignoreUntil(')')
+            return msg
+        return None
 
     def parseInitializer(self):
         value = ''
@@ -198,6 +199,8 @@ class Parser:
     def parseType(self):
         if self.scanner.acceptIf(['static', 'constexpr', 'int']):
             return LLGLType('const')
+        elif self.scanner.acceptIf('...'):
+            return LLGLType('...');
         else:
             isConst = self.scanner.acceptIf('const')
             typename = self.scanner.accept()
@@ -217,7 +220,7 @@ class Parser:
     def parseStructMembers(self, structName):
         members = []
         while self.scanner.tok() != '}':
-            isDeprecated = self.tryParseDeprecated()
+            deprecated = self.tryParseDeprecated()
             fieldType = self.parseType()
             isCtor = fieldType.typename == structName
             isOper = self.scanner.tok() == 'operator'
@@ -256,22 +259,27 @@ class Parser:
                     self.scanner.acceptOrFail(']')
                 if self.scanner.acceptIf('='):
                     member.init = self.parseInitializer()
-                member.isDeprecated = isDeprecated
+                member.deprecated = deprecated
                 members.append(member)
                 self.scanner.acceptOrFail(';')
         return members
+
+    def parseAnnotationArgument(self):
+        if self.scanner.acceptIf('NULL'):
+            return LLGLAnnotation.NULLABLE
+        elif self.scanner.acceptIf('['):
+            self.scanner.accept()
+            self.scanner.acceptOrFail(']')
+            return LLGLAnnotation.ARRAY
+        else:
+            fatal(f"error: unknwon annotation argument '{self.scanner.tok()}'")
+        return LLGLAnnotation.UNDEFINED
 
     def parseParameter(self):
         # Only parse return type name parameter name as C does not support default arguments
         paramType = self.parseType()
 
-        paramName = ''
-        if self.scanner.acceptIf('LLGL_NULLABLE'):
-            self.scanner.acceptOrFail('(')
-            paramName = self.scanner.accept()
-            self.scanner.acceptOrFail(')')
-        else:
-            paramName = self.scanner.accept()
+        paramName = self.scanner.accept() if paramType.baseType != StdType.VARGS else ''
 
         param = LLGLField(paramName, paramType)
 
@@ -280,7 +288,34 @@ class Parser:
             param.type.setArraySize(self.scanner.accept())
             self.scanner.acceptOrFail(']')
 
+        # Parse optional annotations
+        if self.scanner.acceptIf('LLGL_ANNOTATE'):
+            self.scanner.acceptOrFail('(')
+            while self.scanner.good():
+                param.annotations.append(self.parseAnnotationArgument())
+                if not self.scanner.acceptIf(','):
+                    break
+            self.scanner.acceptOrFail(')')
+
         return param
+
+    def parseParameterList(self):
+        params = []
+
+        self.scanner.acceptOrFail('(')
+        if not self.scanner.match(')'):
+            if self.scanner.match(['void', ')']):
+                # Ignore explicit empty parameter list
+                self.scanner.accept()
+            else:
+                # Parse parameters until no more ',' is scanned
+                while True:
+                    params.append(self.parseParameter())
+                    if not self.scanner.acceptIf(','):
+                        break
+        self.scanner.acceptOrFail(')')
+
+        return params
 
     def parseFunctionDecl(self):
         # Parse return type
@@ -292,21 +327,24 @@ class Parser:
         # Parse parameter list
         func = LLGLFunction(name, returnType)
 
-        self.scanner.acceptOrFail('(')
-        if not self.scanner.match(')'):
-            if self.scanner.match(['void', ')']):
-                # Ignore explicit empty parameter list
-                self.scanner.accept()
-            else:
-                # Parse parameters until no more ',' is scanned
-                while True:
-                    func.params.append(self.parseParameter())
-                    if not self.scanner.acceptIf(','):
-                        break
-        self.scanner.acceptOrFail(')')
+        func.params = self.parseParameterList()
         self.scanner.acceptOrFail(';')
 
         return func
+
+    def parseDelegateDecl(self, returnType):
+        # Parse delegate name
+        self.scanner.acceptOrFail(['(', '*'])
+        name = self.scanner.accept()
+        self.scanner.acceptOrFail(')')
+
+        delegate = LLGLFunction(name, returnType)
+
+        # Parse parameter list
+        delegate.params = self.parseParameterList()
+        self.scanner.acceptOrFail(';')
+
+        return delegate
 
     # Parses input file by filename and returns LLGLModule
     def parseHeader(self, filename, processFunctions = False):
@@ -319,6 +357,16 @@ class Parser:
             if processFunctions and self.scanner.acceptIf('LLGL_C_EXPORT'):
                 # Parse function declaration
                 mod.funcs.append(self.parseFunctionDecl())
+            elif self.scanner.acceptIf('typedef') and not self.scanner.match('struct'):
+                # Parse type alias
+                typeDecl = self.parseType()
+
+                if self.scanner.match('('):
+                    # Parse delegate delcaration
+                    mod.delegates.append(self.parseDelegateDecl(typeDecl))
+                else:
+                    # Ignore type definition
+                    self.scanner.ignoreUntil(';')
             elif self.scanner.acceptIf(['enum', 'class']):
                 # Parse enumeration
                 name = self.scanner.accept()
@@ -333,7 +381,7 @@ class Parser:
                 self.scanner.acceptIf('LLGL_EXPORT')
 
                 # Ignore deprecated records
-                ignoreRecord = self.tryParseDeprecated()
+                ignoreRecord = self.tryParseDeprecated() is not None
                 
                 # Parse record name and trim 'LLGL' prefix (occurs in custom structs of C99 wrapper such as LLGLWindowEventListener)
                 name = self.scanner.accept()

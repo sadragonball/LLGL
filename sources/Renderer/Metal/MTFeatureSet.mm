@@ -113,10 +113,10 @@ void LoadFeatureSetCaps(id<MTLDevice> device, MTLFeatureSet fset, RenderingCapab
     features.hasMultiSampleArrayTextures    = false;
     features.hasTextureViews                = true;
     features.hasTextureViewSwizzle          = LLGL_OSX_AVAILABLE(macOS 10.15, iOS 13.0, *);
+    features.hasTextureViewFormatSwizzle    = true;
     features.hasBufferViews                 = true;
     features.hasConstantBuffers             = true;
     features.hasStorageBuffers              = true;
-    features.hasUniforms                    = false;
     features.hasGeometryShaders             = false;
     features.hasTessellationShaders         = false;
     features.hasTessellatorStage            = true;

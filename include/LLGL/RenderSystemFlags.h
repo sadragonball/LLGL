@@ -472,14 +472,23 @@ struct RenderingFeatures
     bool hasTextureViewSwizzle          = false;
 
     /**
+    \brief Specifies whether texture views can have formats with a different layout than their parent texture.
+    \remarks An example of this feature is a texture view with format Format::RG16UInt where as its parent texture has format Format::RGBA8UInt.
+    If this feature is not supported, the number of components and their size must match between the parent texture and its texture views,
+    i.e. a parent texture with format Format::RGBA8UNorm can still have texture views with format Format::RGBA8UInt for instance but not with Format::RG16UInt.
+    \remarks This feature implies that \c hasTextureViews is true.
+    \note Only supported with: Vulkan, OpenGL, Metal.
+    */
+    bool hasTextureViewFormatSwizzle    = false;
+
+    /**
     \brief Specifies whether buffer views are supported.
     \remarks Buffer views can shared their data with another buffer resource in a different range and format.
     \see BufferViewDescriptor
     */
     bool hasBufferViews                 = false;
 
-    //! Specifies whether samplers are supported.
-    //! \todo Rename to \c hasNativeSamplerStates or remove entirely.
+    //! \deprecated Since 0.04b; Can be substituted with \c true.
     LLGL_DEPRECATED("LLGL::RenderingFeatures::hasSamplers is deprecated since 0.04b; All backends must support sampler states either natively or emulated.", "true")
     bool hasSamplers                    = true;
 
@@ -496,13 +505,9 @@ struct RenderingFeatures
     */
     bool hasStorageBuffers              = false;
 
-    /**
-    \brief Specifies whether individual shader uniforms are supported.
-    \note Only supported with: OpenGL.
-    \see CommandBuffer::SetUniform
-    \see CommandBuffer::SetUniforms
-    */
-    bool hasUniforms                    = false;
+    //! \deprecated Since 0.04b; Can be substituted with \c true.
+    LLGL_DEPRECATED("LLGL::RenderingFeatures::hasUniforms is deprecated since 0.04b; All backends must support uniforms either natively or emulated.", "true")
+    bool hasUniforms                    = true;
 
     /**
     \brief Specifies whether geometry shaders are supported.

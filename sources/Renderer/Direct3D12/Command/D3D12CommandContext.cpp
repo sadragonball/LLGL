@@ -366,12 +366,12 @@ void D3D12CommandContext::PrepareStagingDescriptorHeaps(
 
 void D3D12CommandContext::SetGraphicsConstant(UINT parameterIndex, D3D12Constant value, UINT offset)
 {
-    commandList_->SetGraphicsRoot32BitConstant(parameterIndex, value.u32, offset);
+    commandList_->SetGraphicsRoot32BitConstant(parameterIndex, value.bits32, offset);
 }
 
 void D3D12CommandContext::SetComputeConstant(UINT parameterIndex, D3D12Constant value, UINT offset)
 {
-    commandList_->SetComputeRoot32BitConstant(parameterIndex, value.u32, offset);
+    commandList_->SetComputeRoot32BitConstant(parameterIndex, value.bits32, offset);
 }
 
 void D3D12CommandContext::SetGraphicsRootParameter(UINT parameterIndex, D3D12_ROOT_PARAMETER_TYPE parameterType, D3D12_GPU_VIRTUAL_ADDRESS gpuVirtualAddr)
@@ -514,8 +514,15 @@ void D3D12CommandContext::DispatchIndirect(
 
 void D3D12CommandContext::ClearCache()
 {
-    stateCache_.dirtyBits.value = ~0u;
-    stateCache_.stateBits.value = 0;
+    /* Invalidate dirty bits */
+    stateCache_.dirtyBits.pipelineState         = 1;
+    stateCache_.dirtyBits.graphicsRootSignature = 1;
+    stateCache_.dirtyBits.computeRootSignature  = 1;
+    stateCache_.dirtyBits.descriptorHeaps       = 1;
+
+    /* Clear state bits */
+    stateCache_.stateBits.isDeferredPSO         = 0;
+    stateCache_.stateBits.is16BitIndexFormat    = 0;
 }
 
 D3D12_RESOURCE_BARRIER& D3D12CommandContext::NextResourceBarrier()

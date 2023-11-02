@@ -47,10 +47,10 @@ static void InitNullRendererFeatures(RenderingFeatures& features)
     features.hasMultiSampleTextures         = true;
     features.hasTextureViews                = true;
     features.hasTextureViewSwizzle          = true;
+    features.hasTextureViewFormatSwizzle    = true;
     features.hasBufferViews                 = true;
     features.hasConstantBuffers             = true;
     features.hasStorageBuffers              = true;
-    features.hasUniforms                    = true;
     features.hasGeometryShaders             = false;
     features.hasTessellationShaders         = false;
     features.hasTessellatorStage            = false;

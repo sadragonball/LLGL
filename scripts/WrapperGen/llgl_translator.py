@@ -13,17 +13,23 @@ class Translator:
 
     class Declaration:
         type = ''
+        originalType = ''
         name = ''
+        originalName = ''
         init = None
         directive = None
         comment = None
+        deprecated = False
 
-        def __init__(self, inType = '', inName = '', inInit = None, inDirective = None, inComment = None):
+        def __init__(self, inType = '', inName = '', inInit = None, inDirective = None, inComment = None, inDeprecated = False, inOriginalType = None, inOriginalName = None):
             self.type = inType
+            self.originalType = inType if inOriginalType is None else inOriginalType
             self.name = inName
+            self.originalName = inName if inOriginalName is None else inOriginalName
             self.init = inInit
             self.directive = inDirective
             self.comment = inComment
+            self.deprecated = inDeprecated
 
     class DeclarationList:
         decls = []
@@ -35,7 +41,7 @@ class Translator:
 
         def append(self, decl):
             self.decls.append(decl)
-            if not decl.directive:
+            if not decl.directive and decl.type is not None:
                 self.maxLen[0] = max(self.maxLen[0], len(decl.type) if decl.type else 0)
                 self.maxLen[1] = max(self.maxLen[1], len(decl.name))
                 self.maxLen[2] = max(self.maxLen[2], len(decl.init) if decl.init else 0)
@@ -62,6 +68,22 @@ class Translator:
         self.indent -= 1
         self.statement(stmt)
 
+    @staticmethod
     def convertNameToHeaderGuard(name):
         return re.sub(r'([A-Z]+)', r'_\1', name).upper()
+
+    @staticmethod
+    def convertCamelCaseToPascalCase(ident):
+        def makeAbbreviationUpperCase(abbr):
+            nonlocal ident
+            if len(ident) >= len(abbr):
+                identPrefixUpper = ident[:len(abbr)].upper()
+                if identPrefixUpper == abbr:
+                    ident = identPrefixUpper + ident[len(abbr):]
+
+        # Check for certain abbreviations
+        makeAbbreviationUpperCase('CPU')
+
+        # Just change first character to upper case
+        return ident[0].upper() + ident[1:] if len(ident) > 0 else ident;
 

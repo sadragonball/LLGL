@@ -29,6 +29,13 @@ class StdType(Enum):
     STRUCT = 18
     FUNC = 19 # Function pointer
     CONST = 20 # static constexpr int
+    VARGS = 21 # variadic arguments
+
+class StdTypeLimits:
+    MAX_UINT8 = 0xFF
+    MAX_UINT16 = 0xFFFF
+    MAX_UINT32 = 0xFFFF_FFFF
+    MAX_UINT64 = 0xFFFF_FFFF_FFFF_FFFF
 
 class ConditionalType:
     name = ''
@@ -39,6 +46,11 @@ class ConditionalType:
         self.name = name
         self.cond = cond
         self.include = include
+
+class LLGLAnnotation(Enum):
+    UNDEFINED = 0
+    NULLABLE = 1
+    ARRAY = 2
 
 class LLGLMeta:
     UTF8STRING = 'UTF8String'
@@ -64,7 +76,8 @@ class LLGLMeta:
         'long': StdType.LONG,
         'size_t': StdType.SIZE_T,
         'float': StdType.FLOAT,
-        'const': StdType.CONST
+        'const': StdType.CONST,
+        '...': StdType.VARGS
     }
     containers = [
         'vector',
@@ -85,6 +98,7 @@ class LLGLMeta:
         'QueryHeap',
         'RenderPass',
         'RenderTarget',
+        'RenderSystemChild',
         'RenderingDebugger',
         'RenderingProfiler',
         'Report',
@@ -97,6 +111,27 @@ class LLGLMeta:
         'Texture',
         'Window'
     ]
+    handles = [
+        'LLGLLogHandle'
+    ]
+    structFlags = {
+        'BlendTargetDescriptor': 'ColorMaskFlags',
+        'AttachmentClear': 'ClearFlags'
+    }
+    structFlagProperties = [
+        'ColorMask'
+    ]
+    constants = {
+        'LLGL_MAX_NUM_COLOR_ATTACHMENTS': 8,
+        'LLGL_MAX_NUM_ATTACHMENTS': 9,
+        'LLGL_MAX_NUM_VIEWPORTS_AND_SCISSORS': 16,
+        'LLGL_MAX_NUM_SAMPLES': 64,
+        'LLGL_MAX_NUM_SO_BUFFERS': 4,
+        'LLGL_MAX_THREAD_COUNT': -1,
+        'LLGL_INVALID_SLOT': -1,
+        'LLGL_WHOLE_SIZE': -1,
+        'LLGL_CURRENT_SWAP_INDEX': -1
+    }
     includes = {
         '<LLGL-C/Types.h>'
     }
@@ -109,6 +144,7 @@ class LLGLMeta:
     ]
     funcPrefix = 'llgl'
     typePrefix = 'LLGL'
+    delegatePrefix = 'LLGL_PFN_'
 
 class LLGLMacros:
     def translateArraySize(ident):
@@ -191,13 +227,15 @@ class LLGLField:
     name = ''
     type = LLGLType()
     init = None
-    isDeprecated = False
+    deprecated = None
+    annotations = []
 
     def __init__(self, inName, inType = LLGLType()):
         self.name = inName
         self.type = inType
         self.init = None
-        self.isDeprecated = False
+        self.deprecated = None
+        self.annotations = []
 
     def __str__(self):
         s = ''
@@ -243,12 +281,19 @@ class LLGLFunction:
         self.name = name
         self.params = []
 
+    def hasVargs(self):
+        for param in self.params:
+            if param.type.baseType == StdType.VARGS:
+                return True
+        return False
+
 class LLGLModule:
     name = ''
     enums = [] # Array of LLGLRecord
     flags = [] # Array of LLGLRecord
     structs = [] # Array of LLGLRecord
     funcs = [] # Array of LLGLFunction
+    delegates = [] # Array of LLGLFunction
     typeDeps = set() # Set of types used in this header
 
     def __init__(self):
@@ -257,6 +302,7 @@ class LLGLModule:
         self.flags = []
         self.structs = []
         self.funcs = []
+        self.delegates = []
         self.typeDeps = set()
 
     def deriveDependencies(self):
@@ -269,7 +315,20 @@ class LLGLModule:
         self.flags.extend(other.flags)
         self.structs.extend(other.structs)
         self.funcs.extend(other.funcs)
+        self.delegates.extend(other.delegates)
         self.typeDeps.update(other.typeDeps)
+
+    def findEnumByName(self, name):
+        for enum in self.enums:
+            if enum.name == name:
+                return enum
+        return None
+
+    def findFlagsByName(self, name):
+        for flag in self.flags:
+            if flag.name == name:
+                return flag
+        return None
 
     def findStructByName(self, name):
         for struct in self.structs:
